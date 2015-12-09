@@ -1,0 +1,102 @@
+/*
+ * Name:  ReportFailureBatch
+ *
+ * Description: This class will be scheduled to run every 15 min. It will pick up on any failed batch within a 15 min time span and write to the ACE LOG custom object with the batch that failed and why it failed
+ *
+ */
+
+global class ReportFailureBatch implements Database.Batchable<sObject>,Database.Stateful  {
+
+	//Variables 
+	//-----------------------------------------------------------------------------------------------------------
+	global final string query;
+	global list<id> apexjobID;
+	list<id> apexClassID;
+	map<id,string> classIdtoClassName;
+	
+	
+	global ReportFailureBatch()
+	{
+		//Return all jobs that have more than 0 failures and that ran within 15 minutes 
+		//-----------------------------------------------------------------------------------------------------------	
+			apexjobID = new list<id>(); 
+			for(AsyncApexJob apexjob : [Select Id from AsyncApexJob where CompletedDate > :Datetime.now().addMinutes(-15) AND NumberOfErrors > 0 AND ExtendedStatus != ''])
+			{
+				apexjobID.add(apexjob.id);
+			}
+			query='select Id, Status, ApexClassID, CompletedDate, NumberOfErrors, JobItemsProcessed,TotalJobItems, ExtendedStatus from AsyncApexJob where id IN: apexjobID'; 
+ 		
+
+	}
+	 
+	global Database.QueryLocator start(Database.BatchableContext BC)
+	{
+		
+		return Database.getQueryLocator(query);
+		
+	}
+
+	global void execute(Database.BatchableContext BC, List<sObject> scope)
+	{
+		list<T1C_Base__ACE_Log__c> eventlogList = new list<T1C_Base__ACE_Log__c>();
+		apexClassID = new list<id>();
+		classIdtoClassName = new map<id,string>();	
+		
+		//Add the apex class ID to a list to retrieve the class name 
+		//-----------------------------------------------------------------------------------------------------------
+		for(AsyncApexJob apexJobRecord: (AsyncApexJob[])scope)
+		{
+			apexClassID.add(apexJobRecord.ApexClassID);	
+		}
+		
+		//Construct the class ID to class name map 
+		//-----------------------------------------------------------------------------------------------------------
+		getClassNames();	
+		
+		//Set fields for the ACE LOG
+		//-----------------------------------------------------------------------------------------------------------	
+		for(AsyncApexJob apexJobRecord: (AsyncApexJob[])scope)
+		{
+			T1C_Base__ACE_Log__c eventLog = new T1C_Base__ACE_Log__c();
+			
+			//Set the reason for failure and the product
+			//-----------------------------------------------------------------------------------------------------------
+			eventLog.T1C_Base__Additional_Information__c = apexJobRecord.ExtendedStatus;
+			eventLog.T1C_Base__Product__c = 'Fidelity Batch Jobs';
+			
+			//Set the batch class name
+			//-----------------------------------------------------------------------------------------------------------
+			string className =  apexJobRecord.ApexClassID;
+			className = classIdtoClassName.get(apexJobRecord.ApexClassID);			
+			eventLog.T1C_Base__Event__c = className;			
+			
+			
+			eventlogList.add(eventLog);
+			
+		}
+		
+		if(eventlogList.size() > 0)
+		{
+			upsert eventlogList;
+		}
+				
+	}
+
+	global void finish(Database.BatchableContext BC)
+	{
+		
+	}
+	
+   /** 
+    *Description: Retrieves the name of the batch class that failed based on the apex class id
+	*@return: none
+   */  	
+   public void getClassNames()
+	{					
+		for(ApexClass className: [select Id, Name from ApexClass where Id IN:apexClassID])
+		{
+			classIdtoClassName.put(className.id,className.name);		
+		}	
+	}
+
+}
