@@ -19,12 +19,12 @@ global class ReportFailureBatch implements Database.Batchable<sObject>,Database.
 	{
 		//Return all jobs that have more than 0 failures and that ran within 15 minutes 
 		//-----------------------------------------------------------------------------------------------------------	
-			apexjobID = new list<id>(); 
-			for(AsyncApexJob apexjob : [Select Id from AsyncApexJob where CompletedDate > :Datetime.now().addMinutes(-15) AND NumberOfErrors > 0 AND ExtendedStatus != ''])
-			{
-				apexjobID.add(apexjob.id);
-			}
-			query='select Id, Status, ApexClassID, CompletedDate, NumberOfErrors, JobItemsProcessed,TotalJobItems, ExtendedStatus from AsyncApexJob where id IN: apexjobID'; 
+		apexjobID = new list<id>(); 
+		for(AsyncApexJob apexjob : [Select Id from AsyncApexJob where CompletedDate > :Datetime.now().addMinutes(-15) AND NumberOfErrors > 0 AND ExtendedStatus != ''])
+		{
+			apexjobID.add(apexjob.id);
+		}
+		query='select Id, Status, ApexClassID, CompletedDate, NumberOfErrors, JobItemsProcessed,TotalJobItems, ExtendedStatus from AsyncApexJob where id IN: apexjobID'; 
  		
 
 	}
